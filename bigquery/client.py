@@ -782,6 +782,7 @@ class BigQueryClient(object):
             priority=None,
             create_disposition=None,
             write_disposition=None,
+            flatten_results=None,
     ):
         """
         Write query result to table. If dataset or table is not provided,
@@ -834,6 +835,9 @@ class BigQueryClient(object):
 
         if write_disposition:
             configuration['writeDisposition'] = write_disposition
+
+        if flatten_results is not None:
+            configuration['flattenResults'] = flatten_results
 
         body = {
             "configuration": {
