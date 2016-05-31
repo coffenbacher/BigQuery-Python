@@ -2,18 +2,16 @@ import unittest
 
 import mock
 import six
-from nose.tools import raises
-
-from apiclient.errors import HttpError
 from bigquery import client
 from bigquery.errors import (
     JobInsertException, JobExecutingException,
     BigQueryTimeoutException
 )
+from googleapiclient.errors import HttpError
+from nose.tools import raises
 
 
 class HttpResponse(object):
-
     def __init__(self, status, reason='There was an error'):
         """
         Args:
@@ -24,7 +22,6 @@ class HttpResponse(object):
 
 
 class TestGetClient(unittest.TestCase):
-
     def setUp(self):
         client._bq_client = None
 
@@ -50,7 +47,8 @@ class TestGetClient(unittest.TestCase):
 
         mock_cred = mock.Mock()
         mock_http = mock.Mock()
-        mock_cred.return_value.authorize.return_value = mock_http
+        mock_service_url = mock.Mock()
+        mock_cred.from_p12_keyfile_buffer.return_value.authorize.return_value = mock_http
         mock_bq = mock.Mock()
         mock_build.return_value = mock_bq
         key = 'key'
@@ -59,14 +57,18 @@ class TestGetClient(unittest.TestCase):
         mock_return_cred.return_value = mock_cred
 
         bq_client = client.get_client(
-            project_id, service_account=service_account, private_key=key,
+            project_id, service_url=mock_service_url,
+            service_account=service_account, private_key=key,
             readonly=True)
 
         mock_return_cred.assert_called_once_with()
-        mock_cred.assert_called_once_with(service_account, key,
-                                          scope=BIGQUERY_SCOPE_READ_ONLY)
-        self.assertTrue(mock_cred.return_value.authorize.called)
-        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http)
+        mock_cred.from_p12_keyfile_buffer.assert_called_once_with(
+            service_account, mock.ANY,
+            scopes=BIGQUERY_SCOPE_READ_ONLY)
+        self.assertTrue(
+            mock_cred.from_p12_keyfile_buffer.return_value.authorize.called)
+        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http,
+                                           discoveryServiceUrl=mock_service_url)
         self.assertEquals(mock_bq, bq_client.bigquery)
         self.assertEquals(project_id, bq_client.project_id)
 
@@ -80,7 +82,8 @@ class TestGetClient(unittest.TestCase):
 
         mock_cred = mock.Mock()
         mock_http = mock.Mock()
-        mock_cred.return_value.authorize.return_value = mock_http
+        mock_service_url = mock.Mock()
+        mock_cred.from_p12_keyfile_buffer.return_value.authorize.return_value = mock_http
         mock_bq = mock.Mock()
         mock_build.return_value = mock_bq
         key = 'key'
@@ -89,22 +92,23 @@ class TestGetClient(unittest.TestCase):
         mock_return_cred.return_value = mock_cred
 
         bq_client = client.get_client(
-            project_id, service_account=service_account, private_key=key,
+            project_id, service_url=mock_service_url,
+            service_account=service_account, private_key=key,
             readonly=False)
 
         mock_return_cred.assert_called_once_with()
-        mock_cred.assert_called_once_with(service_account, key,
-                                          scope=BIGQUERY_SCOPE)
-        self.assertTrue(mock_cred.return_value.authorize.called)
-        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http)
+        mock_cred.from_p12_keyfile_buffer.assert_called_once_with(
+            service_account, mock.ANY, scopes=BIGQUERY_SCOPE)
+        self.assertTrue(
+            mock_cred.from_p12_keyfile_buffer.return_value.authorize.called)
+        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http,
+                                           discoveryServiceUrl=mock_service_url)
         self.assertEquals(mock_bq, bq_client.bigquery)
         self.assertEquals(project_id, bq_client.project_id)
 
     @mock.patch('bigquery.client._credentials')
     @mock.patch('bigquery.client.build')
-    @mock.patch('__builtin__.open' if six.PY2 else 'builtins.open')
-    def test_initialize_key_file(self, mock_open, mock_build,
-                                 mock_return_cred):
+    def test_initialize_key_file(self, mock_build, mock_return_cred):
         """Ensure that a BigQueryClient is initialized and returned with
         read/write permissions using a private key file.
         """
@@ -112,26 +116,28 @@ class TestGetClient(unittest.TestCase):
 
         mock_cred = mock.Mock()
         mock_http = mock.Mock()
-        mock_cred.return_value.authorize.return_value = mock_http
+        mock_service_url = mock.Mock()
+        mock_cred.from_p12_keyfile.return_value.authorize.return_value = mock_http
         mock_bq = mock.Mock()
         mock_build.return_value = mock_bq
         key_file = 'key.pem'
-        key = 'key'
-        mock_open.return_value.__enter__.return_value.read.return_value = key
         service_account = 'account'
         project_id = 'project'
         mock_return_cred.return_value = mock_cred
 
         bq_client = client.get_client(
-            project_id, service_account=service_account,
+            project_id, service_url=mock_service_url,
+            service_account=service_account,
             private_key_file=key_file, readonly=False)
 
-        mock_open.assert_called_once_with(key_file, 'rb')
         mock_return_cred.assert_called_once_with()
-        mock_cred.assert_called_once_with(service_account, key,
-                                          scope=BIGQUERY_SCOPE)
-        self.assertTrue(mock_cred.return_value.authorize.called)
-        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http)
+        mock_cred.from_p12_keyfile.assert_called_once_with(service_account,
+                                                           key_file,
+                                                           scopes=BIGQUERY_SCOPE)
+        self.assertTrue(
+            mock_cred.from_p12_keyfile.return_value.authorize.called)
+        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http,
+                                           discoveryServiceUrl=mock_service_url)
         self.assertEquals(mock_bq, bq_client.bigquery)
         self.assertEquals(project_id, bq_client.project_id)
 
@@ -147,7 +153,8 @@ class TestGetClient(unittest.TestCase):
 
         mock_cred = mock.Mock()
         mock_http = mock.Mock()
-        mock_cred.return_value.authorize.return_value = mock_http
+        mock_service_url = mock.Mock()
+        mock_cred.from_json_keyfile_dict.return_value.authorize.return_value = mock_http
         mock_bq = mock.Mock()
         mock_build.return_value = mock_bq
         json_key_file = 'key.json'
@@ -156,15 +163,55 @@ class TestGetClient(unittest.TestCase):
         project_id = 'project'
         mock_return_cred.return_value = mock_cred
 
-        bq_client = client.get_client(project_id, json_key_file=json_key_file, readonly=False)
+        bq_client = client.get_client(
+            project_id, service_url=mock_service_url,
+            json_key_file=json_key_file, readonly=False)
 
-        mock_open.assert_called_once_with(json_key_file, 'rb')
         mock_return_cred.assert_called_once_with()
-        mock_cred.assert_called_once_with(json_key['client_email'], json_key['private_key'], scope=BIGQUERY_SCOPE)
-        self.assertTrue(mock_cred.return_value.authorize.called)
-        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http)
+        mock_cred.from_json_keyfile_dict.assert_called_once_with(json_key,
+                                                                 scopes=BIGQUERY_SCOPE)
+        self.assertTrue(
+            mock_cred.from_json_keyfile_dict.return_value.authorize.called)
+        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http,
+                                           discoveryServiceUrl=mock_service_url)
         self.assertEquals(mock_bq, bq_client.bigquery)
         self.assertEquals(project_id, bq_client.project_id)
+
+    @mock.patch('bigquery.client._credentials')
+    @mock.patch('bigquery.client.build')
+    @mock.patch('__builtin__.open' if six.PY2 else 'builtins.open')
+    def test_initialize_json_key_file_without_project_id(self, mock_open, mock_build,
+                                                         mock_return_cred):
+        """Ensure that a BigQueryClient is initialized and returned with
+        read/write permissions using a JSON key file without project_id.
+        """
+        from bigquery.client import BIGQUERY_SCOPE
+        import json
+
+        mock_cred = mock.Mock()
+        mock_http = mock.Mock()
+        mock_service_url = mock.Mock()
+        mock_cred.from_json_keyfile_dict.return_value.authorize.return_value = mock_http
+        mock_bq = mock.Mock()
+        mock_build.return_value = mock_bq
+        json_key_file = 'key.json'
+        json_key = {'client_email': 'mail', 'private_key': 'pkey', 'project_id': 'project'}
+        mock_open.return_value.__enter__.return_value.read.return_value = json.dumps(json_key)
+        mock_return_cred.return_value = mock_cred
+
+        bq_client = client.get_client(
+            service_url=mock_service_url, json_key_file=json_key_file, readonly=False)
+
+        mock_open.assert_called_once_with(json_key_file, 'r')
+        mock_return_cred.assert_called_once_with()
+        mock_cred.from_json_keyfile_dict.assert_called_once_with(json_key,
+                                                                 scopes=BIGQUERY_SCOPE)
+        self.assertTrue(
+            mock_cred.from_json_keyfile_dict.return_value.authorize.called)
+        mock_build.assert_called_once_with('bigquery', 'v2', http=mock_http,
+                                           discoveryServiceUrl=mock_service_url)
+        self.assertEquals(mock_bq, bq_client.bigquery)
+        self.assertEquals(json_key['project_id'], bq_client.project_id)
 
 
 class TestQuery(unittest.TestCase):
@@ -205,6 +252,7 @@ class TestQuery(unittest.TestCase):
         )
         self.assertEquals(job_id, 'spiderman')
         self.assertEquals(results, [])
+
 
     def test_query_max_results_set(self):
         """Ensure that we retrieve the job id from the query and the maxResults
@@ -370,6 +418,30 @@ class TestQuery(unittest.TestCase):
         )
         self.assertEquals(job_id, 'spiderman')
         self.assertEquals(results, [{'foo': 10}])
+
+    def test_query_with_using_legacy_sql(self):
+        """Ensure that use_legacy_sql bool gets used"""
+
+        mock_query_job = mock.Mock()
+        expected_job_id = 'spiderman'
+        expected_job_ref = {'jobId': expected_job_id}
+
+        mock_query_job.execute.return_value = {
+            'jobReference': expected_job_ref,
+            'jobComplete': True
+        }
+
+        self.mock_job_collection.query.return_value = mock_query_job
+
+        job_id, results = self.client.query(self.query, use_legacy_sql=False)
+
+        self.mock_job_collection.query.assert_called_once_with(
+            projectId=self.project_id,
+            body={'query': self.query, 'timeoutMs': 0, 'dryRun': False,
+                  'maxResults': None, 'useLegacySql': False}
+        )
+        self.assertEquals(job_id, 'spiderman')
+        self.assertEquals(results, [])
 
 
 class TestGetQueryResults(unittest.TestCase):
@@ -1012,6 +1084,7 @@ class TestWriteToTable(unittest.TestCase):
         self.project_id = 'project'
         self.dataset_id = 'dataset'
         self.table_id = 'table'
+        self.external_udf_uris = ['gs://bucket/external_udf.js']
         self.use_query_cache = False
         self.priority = "INTERACTIVE"
         self.client = client.BigQueryClient(self.mock_api,
@@ -1032,6 +1105,9 @@ class TestWriteToTable(unittest.TestCase):
                         "tableId": self.table_id
                     },
                     "query": self.query,
+                    "userDefinedFunctionResources": [{
+                        "resourceUri": self.external_udf_uris[0]
+                    }],
                     "useQueryCache": self.use_query_cache,
                     "priority": self.priority,
                 }
@@ -1042,6 +1118,7 @@ class TestWriteToTable(unittest.TestCase):
         result = self.client.write_to_table(self.query,
                                             self.dataset_id,
                                             self.table_id,
+                                            external_udf_uris=self.external_udf_uris,
                                             use_query_cache=False,
                                             priority=self.priority)
 
@@ -1240,10 +1317,19 @@ FULL_TABLE_LIST_RESPONSE = {
         },
         {
             "kind": "bigquery#table",
+            "id": "project:dataset.table_not_matching_naming",
+            "tableReference": {
+                "projectId": "project",
+                "datasetId": "dataset",
+                "tableId": "table_not_matching_naming"
+            }
+        },
+        {
+            "kind": "bigquery#table",
             "id": "bad table data"
-        }
+        },
     ],
-    "totalItems": 8
+    "totalItems": 9
 }
 
 
@@ -1586,6 +1672,156 @@ class TestCreateTable(unittest.TestCase):
             projectId=self.project, datasetId=self.dataset, body=body)
 
         self.mock_tables.insert.return_value.execute.assert_called_with()
+
+
+class TestUpdateTable(unittest.TestCase):
+
+    def setUp(self):
+        self.mock_bq_service = mock.Mock()
+        self.mock_tables = mock.Mock()
+        self.mock_bq_service.tables.return_value = self.mock_tables
+        self.table = 'table'
+        self.schema = [
+            {'name': 'foo', 'type': 'STRING', 'mode': 'nullable'},
+            {'name': 'bar', 'type': 'FLOAT', 'mode': 'nullable'}
+        ]
+        self.project = 'project'
+        self.dataset = 'dataset'
+        self.client = client.BigQueryClient(self.mock_bq_service, self.project)
+        self.body = {
+            'schema': {'fields': self.schema},
+            'tableReference': {
+                'tableId': self.table, 'projectId': self.project,
+                'datasetId': self.dataset}
+        }
+        self.expiration_time = 1437513693000
+
+    def test_table_update_failed(self):
+        """Ensure that if updating the table fails, False is returned,
+        or if swallow_results is False an empty dict is returned."""
+
+        self.mock_tables.update.return_value.execute.side_effect = (
+            HttpError(HttpResponse(404), 'There was an error'.encode('utf8')))
+
+        actual = self.client.update_table(self.dataset, self.table,
+                                          self.schema)
+
+        self.assertFalse(actual)
+
+        self.client.swallow_results = False
+
+        actual = self.client.update_table(self.dataset, self.table,
+                                          self.schema)
+
+        self.assertEqual(actual, {})
+
+        self.client.swallow_results = True
+
+        self.mock_tables.update.assert_called_with(
+            projectId=self.project, datasetId=self.dataset, body=self.body)
+
+        self.mock_tables.update.return_value.execute.assert_called_with()
+
+    def test_table_update_success(self):
+        """Ensure that if updating the table succeeds, True is returned,
+        or if swallow_results is False the actual response is returned."""
+
+        self.mock_tables.update.return_value.execute.side_effect = [{
+            'status': 'foo'}, {'status': 'bar'}]
+
+        actual = self.client.update_table(self.dataset, self.table,
+                                          self.schema)
+
+        self.assertTrue(actual)
+
+        self.client.swallow_results = False
+
+        actual = self.client.update_table(self.dataset, self.table,
+                                          self.schema)
+
+        self.assertEqual(actual, {'status': 'bar'})
+
+        self.client.swallow_results = True
+
+        self.mock_tables.update.assert_called_with(
+            projectId=self.project, datasetId=self.dataset, body=self.body)
+
+        self.mock_tables.update.return_value.execute.assert_called_with()
+
+
+class TestPatchTable(unittest.TestCase):
+
+    def setUp(self):
+        self.mock_bq_service = mock.Mock()
+        self.mock_tables = mock.Mock()
+        self.mock_bq_service.tables.return_value = self.mock_tables
+        self.table = 'table'
+        self.schema = [
+            {'name': 'foo', 'type': 'STRING', 'mode': 'nullable'},
+            {'name': 'bar', 'type': 'FLOAT', 'mode': 'nullable'}
+        ]
+        self.project = 'project'
+        self.dataset = 'dataset'
+        self.client = client.BigQueryClient(self.mock_bq_service, self.project)
+        self.body = {
+            'schema': {'fields': self.schema},
+            'tableReference': {
+                'tableId': self.table, 'projectId': self.project,
+                'datasetId': self.dataset}
+        }
+        self.expiration_time = 1437513693000
+
+    def test_table_patch_failed(self):
+        """Ensure that if patching the table fails, False is returned,
+        or if swallow_results is False an empty dict is returned."""
+
+        self.mock_tables.patch.return_value.execute.side_effect = (
+            HttpError(HttpResponse(404), 'There was an error'.encode('utf8')))
+
+        actual = self.client.patch_table(self.dataset, self.table,
+                                         self.schema)
+
+        self.assertFalse(actual)
+
+        self.client.swallow_results = False
+
+        actual = self.client.patch_table(self.dataset, self.table,
+                                         self.schema)
+
+        self.assertEqual(actual, {})
+
+        self.client.swallow_results = True
+
+        self.mock_tables.patch.assert_called_with(
+            projectId=self.project, datasetId=self.dataset, body=self.body)
+
+        self.mock_tables.patch.return_value.execute.assert_called_with()
+
+    def test_table_patch_success(self):
+        """Ensure that if patching the table succeeds, True is returned,
+        or if swallow_results is False the actual response is returned."""
+
+        self.mock_tables.patch.return_value.execute.side_effect = [{
+            'status': 'foo'}, {'status': 'bar'}]
+
+        actual = self.client.patch_table(self.dataset, self.table,
+                                         self.schema)
+
+        self.assertTrue(actual)
+
+        self.client.swallow_results = False
+
+        actual = self.client.patch_table(self.dataset, self.table,
+                                         self.schema)
+
+        self.assertEqual(actual, {'status': 'bar'})
+
+        self.client.swallow_results = True
+
+        self.mock_tables.patch.assert_called_with(
+            projectId=self.project, datasetId=self.dataset, body=self.body)
+
+        self.mock_tables.patch.return_value.execute.assert_called_with()
 
 
 class TestCreateView(unittest.TestCase):
@@ -1942,11 +2178,78 @@ class TestPushRows(unittest.TestCase):
         self.mock_table_data.insertAll.return_value.execute.assert_has_calls(
             execute_calls)
 
+    def test_request_data_with_options(self):
+        """Ensure that insertAll body has optional property only when
+        the optional parameter of push_rows passed.
+        """
+        expected_body = self.data.copy()
+
+        self.client.push_rows(
+            self.dataset, self.table, self.rows,
+            insert_id_key='one')
+        self.mock_table_data.insertAll.assert_called_with(
+            projectId=self.project,
+            datasetId=self.dataset,
+            tableId=self.table,
+            body=expected_body)
+
+        self.client.push_rows(
+            self.dataset, self.table, self.rows,
+            insert_id_key='one',
+            ignore_unknown_values=False,
+            skip_invalid_rows=False)
+        expected_body['ignoreUnknownValues'] = False
+        expected_body['skipInvalidRows'] = False
+        self.mock_table_data.insertAll.assert_called_with(
+            projectId=self.project,
+            datasetId=self.dataset,
+            tableId=self.table,
+            body=expected_body)
+
+        self.client.push_rows(
+            self.dataset, self.table, self.rows,
+            insert_id_key='one',
+            ignore_unknown_values=True,
+            skip_invalid_rows=True,
+            template_suffix='20160428'
+        )
+        expected_body['ignoreUnknownValues'] = True
+        expected_body['skipInvalidRows'] = True
+        expected_body['templateSuffix'] = '20160428'
+        self.mock_table_data.insertAll.assert_called_with(
+            projectId=self.project,
+            datasetId=self.dataset,
+            tableId=self.table,
+            body=expected_body)
+
 
 class TestGetAllTables(unittest.TestCase):
 
-    def test_get_tables(self):
+    def test_get_all_tables(self):
         """Ensure get_all_tables fetches table names from BigQuery."""
+
+        mock_execute = mock.Mock()
+        mock_execute.execute.return_value = FULL_TABLE_LIST_RESPONSE
+
+        mock_tables = mock.Mock()
+        mock_tables.list.return_value = mock_execute
+
+        mock_bq_service = mock.Mock()
+        mock_bq_service.tables.return_value = mock_tables
+
+        bq = client.BigQueryClient(mock_bq_service, 'project')
+
+        expected_result = [
+            '2013_05_appspot', '2013_06_appspot_1', '2013_06_appspot_2',
+            '2013_06_appspot_3', '2013_06_appspot_4', '2013_06_appspot_5',
+            'appspot_6_2013_06', 'table_not_matching_naming'
+        ]
+
+        tables = bq.get_all_tables('dataset')
+        self.assertEquals(expected_result, tables)
+
+    def test_get_tables(self):
+        """Ensure _get_all_tables fetches table names from BigQuery."""
 
         mock_execute = mock.Mock()
         mock_execute.execute.return_value = FULL_TABLE_LIST_RESPONSE
